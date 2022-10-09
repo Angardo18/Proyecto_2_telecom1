@@ -36,7 +36,6 @@ class Navegador(QWidget,Ui_Form):
             else:
                 requestString += '/' + lista[i]
         requestString+= httpVersion
-
         # se agregan los headers
         requestString+="Host: "+hostName+"\r\n"
         requestString+="Connection: keep-alive\r\n"
@@ -58,9 +57,7 @@ class Navegador(QWidget,Ui_Form):
         headData = responseText.split('\r\n\r\n')
         
         self.txtDisplay.setText(headData[1])
-        
-        
-        
+                
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
     window = Navegador()

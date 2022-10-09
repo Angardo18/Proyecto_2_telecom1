@@ -3,7 +3,7 @@ import socket
 
 
 url = input("ingrese una URL: ").strip()
-
+#http//hosname/directorios
 lista = url.split('/')
 # constantes
 hostName = ""

@@ -5,34 +5,70 @@ from collections import OrderedDict
 miDns = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
 # url a pedir
-addr = "www.github.com"
+addr = "www.google.com"
 RRtype = "A"
 # url para los tipos de mensaje
 
+# -------------------- funciones--------------------------
 #RR types
-types = [
-        "ERROR", # tipo 0 no existe
-        "A",
-        "NS",
-        "MD",
-        "MF",
-        "CNAME",
-        "SOA",
-        "MB",
-        "MG",
-        "MR",
-        "NULL",
-        "WKS",
-        "PTS",
-        "HINFO",
-        "MINFO",
-        "MX",
-        "TXT",
-        "","","","","","",
-        "","","","","",
-        "AAAA"
-    ]
-
+def getType(num,inverse):    
+    types = [
+            "ERROR", # tipo 0 no existe
+            "A",
+            "NS",
+            "MD",
+            "MF",
+            "CNAME",
+            "SOA",
+            "MB",
+            "MG",
+            "MR",
+            "NULL",
+            "WKS",
+            "PTS",
+            "HINFO",
+            "MINFO",
+            "MX",
+            "TXT",
+            "","","","","","",
+            "","","","","",
+            "AAAA"
+        ]
+    if inverse:
+        return types.index(num)
+    else:
+        return types[num]
+def getUrl(data,nextStart):
+    url = ""
+    # se obtiene el numero de etiquetas, o bien el offset
+    lenghtWord = int(data[nextStart:nextStart+2],16)
+    actualChar = ''
+    nextStart += 2
+    while lenghtWord != 0:
+        #print(lenghtWord)
+        if lenghtWord <=63:
+            #print("Lenght: ",lenghtWord)
+            # si no se esta usando la compresion
+            for i in range(0,lenghtWord):
+                actualChar = chr(int(data[nextStart:nextStart+2],16))
+                #print(actualChar)
+                url += actualChar
+                nextStart +=2
+        else:
+            # si esta comprimido
+            offset = 2* (int(data[nextStart-2:nextStart+2],16) - int("C000",16))
+            urlReturn, a = getUrl(data, offset)
+            url += urlReturn
+            nextStart+=2
+            #print(nextStart)
+            return url,nextStart
+            
+        lenghtWord = int(data[nextStart:nextStart+2],16)
+        nextStart+=2
+        if lenghtWord != 0:
+            url += "."
+    return url,nextStart
+#-------- crear el mensaje ---------------------------------------
 Id = 1234 
 qr = 0      # query =0, response =1 1 bit
 opCode = 0  # Standard query        4 bits
@@ -78,7 +114,7 @@ for i in addrSplit:
 message += "00" #fin de la QNAME
 
 #QTYPE
-qtypeNum =  types.index(RRtype) # codigo del RR
+qtypeNum = getType(RRtype,True)# types.index(RRtype) # codigo del RR
 message += "{:04x}".format(qtypeNum) # se coloca en hex
 #QCLASS
 qclass = 1
@@ -87,56 +123,36 @@ message += "{:04x}".format(qclass)
 # UDP Message
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-sock.sendto(binascii.unhexlify(message), ("192.55.83.30",53))
+sock.sendto(binascii.unhexlify(message), ("198.41.0.4",53))
 data, _ = sock.recvfrom(4096)
 responseDns = binascii.hexlify(data).decode("utf-8")   
-#print(h)
-#descifrar la respuesta
-print(responseDns[44:46])
-print("Len response: ",len(responseDns))
+#-------------------------------------------------------------------
+#----------------- descifrar la respuesta --------------------------
+
+#---------- header -----------------------
 responseId = responseDns[0:4] #ID de la consulta
 responseParams = responseDns[5:8] #parametros de la consulta
 questionCount = responseDns[9:12]
 answerCount = responseDns[13:16]
 nsCount = responseDns[17:20]
-aditionalCount = responseDns[21:24]
-
+aditionalCount = responseDns[20:24]
 parametros = "{:b}".format(int(responseParams,16)).zfill(16)
-
+#se convierte de string hex a entero
 nsCount = int(nsCount,16)
 answerCount = int(answerCount,16)
 aditionalCount = int(aditionalCount,16)
 
-#QUESTION SECTION
-nextStart = 26
-actualChar = responseDns[24:26]
+#----- QUESTION SECTION ------------------
+nextStart = 24
 #print(actualChar)
 url = ""
-lenWord = int(actualChar,16)
-compressionOffset = 23
-while lenWord != 0:
-    #print("Largo de la letra: ",lenWord)
-    word = ""
-    for i in range(0,lenWord):
-        #nextStart
-        actualChar = responseDns[nextStart:nextStart+2]
-        print(chr(int(actualChar,16)), " Index ", nextStart)
-        nextStart+=2
-        #print(actualChar)
-        url += chr(int(actualChar,16))
-    
-    
-    actualChar = responseDns[nextStart:nextStart+2]
-    lenWord = int(actualChar,16)
-    if lenWord != 0:
-        url += "."
-    #print(url)
-    nextStart+=2
-    
+url,nextStart = getUrl(responseDns, nextStart)
+print(url)
+
 responseQtype = responseDns[nextStart:nextStart+4]
 nextStart+=4 #puntero a la siguiente parte de la respuesta a leer
 
-responseQtype = types[int(responseQtype,16)]
+responseQtype = getType(int(responseQtype,16),False)# types[int(responseQtype,16)]
 responseQclass = responseDns[nextStart:nextStart+4]
 nextStart+=4 #puntero a la siguiente parte de la respuesta a leer
 #print(responseQclass)
@@ -148,14 +164,17 @@ for i in range(0,answerCount+nsCount+aditionalCount):
     print(nextStart)
     answerText = ""
     #obtener la informacion
-    answerName = responseDns[nextStart:nextStart+4]    
-    #print("Tipo: ",int(responseDns[nextStart+4:nextStart+8],16))
-    answerType =  types[ int(responseDns[nextStart+4:nextStart+8],16) ]
-    AnswerClass = responseDns[nextStart+8:nextStart+12]
-    answerTtl = int(responseDns[nextStart+12:nextStart+20],16)
-    answerLength = int(responseDns[nextStart+20:nextStart+24],16)
-    nextStart+=24
-    answerText += "RR type: " + answerType
+    #answerName = responseDns[nextStart:nextStart+4]    
+    answerName,nextStart = getUrl(responseDns, nextStart)
+    answerText += "NAME: "+ answerName
+
+    answerType =  getType(int(responseDns[nextStart:nextStart+4],16), False) #types[ int(responseDns[nextStart+4:nextStart+8],16) ]
+    AnswerClass = responseDns[nextStart+4:nextStart+8]
+    answerTtl = int(responseDns[nextStart+8:nextStart+16],16)
+    answerLength = int(responseDns[nextStart+16:nextStart+20],16)
+    
+    nextStart+=20
+    answerText += " ,RR type: " + answerType
     if answerType == "A":
         answerText += ", IP: "
         #se busca la IP del dominio
@@ -167,44 +186,47 @@ for i in range(0,answerCount+nsCount+aditionalCount):
                 answerText += "."
     elif answerType == "NS":
         answerText += ", URL: "
-        actualChar = responseDns[nextStart:nextStart+2]
-        nextStart+=2
-        lenWord = int(actualChar,16)
-        while lenWord != 0:
-            if lenWord <=63:
-                for i in range(0,lenWord):
-                    actualChar = responseDns[nextStart:nextStart+2]
+        
+        nsUrl, nextStart = getUrl(responseDns, nextStart)
+        answerText += nsUrl
+        # actualChar = responseDns[nextStart:nextStart+2]
+        # nextStart+=2
+        # lenWord = int(actualChar,16)
+        # while lenWord != 0:
+        #     if lenWord <=63:
+        #         for i in range(0,lenWord):
+        #             actualChar = responseDns[nextStart:nextStart+2]
                     
-                    nextStart+=2
-                    answerText += chr(int(actualChar,16))
-                    #print(answerText," nextStart: ",nextStart)
+        #             nextStart+=2
+        #             answerText += chr(int(actualChar,16))
+        #             #print(answerText," nextStart: ",nextStart)
                 
-            else:
-                #si se mando un dominio comprimido
-                offset = 46+ (int(responseDns[nextStart-2:nextStart+2],16) -int("C000",16))
+        #     else:
+        #         #si se mando un dominio comprimido
+        #         offset = 2*(int(responseDns[nextStart-2:nextStart+2],16) -int("C000",16))
                 
-                nextStart +=2
-                lenWord = int(responseDns[offset:offset+2],16)
-                offset += 2
-                while lenWord!=0:
+        #         nextStart +=2
+        #         lenWord = int(responseDns[offset:offset+2],16)
+        #         offset += 2
+        #         while lenWord!=0:
                     
-                    for i in range(0,lenWord):
-                        actualChar = responseDns[offset:offset+2]
-                        offset+=2
-                        answerText += chr(int(actualChar,16))
-                    actualChar = responseDns[offset:offset+2]
-                    offset+=2
-                    lenWord = int(actualChar,16)
-                    if lenWord != 0:
-                        answerText += "."
-                break
+        #             for i in range(0,lenWord):
+        #                 actualChar = responseDns[offset:offset+2]
+        #                 offset+=2
+        #                 answerText += chr(int(actualChar,16))
+        #             actualChar = responseDns[offset:offset+2]
+        #             offset+=2
+        #             lenWord = int(actualChar,16)
+        #             if lenWord != 0:
+        #                 answerText += "."
+        #         break
                     
                     
-            actualChar = responseDns[nextStart:nextStart+2]
-            nextStart+=2
-            lenWord = int(actualChar,16)
-            if lenWord != 0:
-                answerText += "."
+        #     actualChar = responseDns[nextStart:nextStart+2]
+        #     nextStart+=2
+        #     lenWord = int(actualChar,16)
+        #     if lenWord != 0:
+        #         answerText += "."
     else:
        nextStart+= 2*answerLength 
     print(answerText)
