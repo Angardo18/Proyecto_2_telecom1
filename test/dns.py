@@ -1,8 +1,7 @@
 import socket
 import binascii
-from collections import OrderedDict
 
-miDns = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+
 #---------------------- Datos ingresados -----------------
 # url a pedir
 addr = "www.google.com"
@@ -172,7 +171,10 @@ def responseTreatment(responseDns):
         responseText+= answerText + '\n'
     
     return responseText
-    
+
+
+
+miDns = socket.socket(socket.AF_INET,socket.SOCK_STREAM)   
 message = createDnsMessage()
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -183,5 +185,6 @@ responseDns = binascii.hexlify(data).decode("utf-8")
 
 text = responseTreatment(responseDns)
 print(text)
+miDns.close()
 
 
