@@ -59,19 +59,41 @@ class Navegador(QWidget,Ui_Form):
         self.txtDisplay.setText(headData[1])
     
     def sendDns(self):
-        miDns = socket.socket(socket.AF_INET,socket.SOCK_STREAM)   
-        message = self.createDnsMessage()
+        
+        message = self.createDnsMessage(False)
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        sock.sendto(binascii.unhexlify(message), (self.txtIpDns.text(),53))
-        data, _ = sock.recvfrom(4096)
+        miDns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        miDns.sendto(binascii.unhexlify(message), (self.txtIpDns.text(),53))
+        data, _ = miDns.recvfrom(8192)
+        
         responseDns = binascii.hexlify(data).decode("utf-8")
 
-        text = self.responseTreatment(responseDns)
+        print(self.isTruncate(responseDns))
+        
+        sendTcp = self.isTruncate(responseDns)
+        
+        if sendTcp:
+            #se arma el paquete, pero por tcp, indicando el largo del mensaje
+            message = self.createDnsMessage(True)
+            conect = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #socket tcp
+            conect.connect( (self.txtIpDns.text(), 53))
+            conect.send(binascii.unhexlify(message))
+            response = conect.recv(8192)
+            responseDns = binascii.hexlify(response).decode("utf-8")
+        
+        text = self.responseTreatment(responseDns,sendTcp)
         print(text)
         miDns.close()
         self.txtDnsResponse.setText(text)
+    
+    
+    def isTruncate(self, data):
+        
+        responseParams = data[5:8] #parametros de la consulta
+        params = "{:b}".format(int(responseParams,16)).zfill(16)
+        TC = params[6]
+        
+        return TC == "1"    
     
     '''
     Devuelve el tipo del registro (RR), si inverse=False
@@ -101,7 +123,7 @@ class Navegador(QWidget,Ui_Form):
          es el primer byte a leer de data
     '''
     
-    def getUrl(self,data,nextStart):
+    def getUrl(self,data,nextStart,isTcp):
         url = ""
         # se obtiene el numero de etiquetas, o bien el offset
         lenghtWord = int(data[nextStart:nextStart+2],16)
@@ -123,7 +145,9 @@ class Navegador(QWidget,Ui_Form):
                 # los mismos datos, y el byte donde comienza a leer, esto sucede
                 # hasta que encuentre un 00 como largo de la etiqueta.
                 offset = 2* (int(data[nextStart-2:nextStart+2],16) - int("C000",16))
-                urlReturn, a = self.getUrl(data, offset)
+                if isTcp:
+                    offset+= 4 #debido a que si se recibe en TCP al inicio viene el largo,
+                urlReturn, a = self.getUrl(data, offset,isTcp)
                 url += urlReturn
                 nextStart+=2
                 #print(nextStart)
@@ -137,7 +161,7 @@ class Navegador(QWidget,Ui_Form):
         return url,nextStart
     
     ''' Se crea el mensaje que sera enviado al DNS server'''
-    def createDnsMessage(self):
+    def createDnsMessage(self,isTcp):
         Id = int(self.txtId.text())
         qr = 0      # query =0, response =1 1 bit
         opCode = 0  # Standard query        4 bits
@@ -184,26 +208,49 @@ class Navegador(QWidget,Ui_Form):
         #QCLASS
         qclass = 1
         message += "{:04x}".format(qclass)
+        
+        if isTcp:
+            print(len(message))
+            lengthMessage = "{:04x}".format(int(len(message)/2)) #largo en bytes 
+            message = lengthMessage + message
+
         return message
     
-    def responseTreatment(self,responseDns):
+    def responseTreatment(self,responseDns,isTcp):
         responseText = ""
-        #---------- header -----------------------
-        responseId = responseDns[0:4] #ID de la consulta
-        responseParams = responseDns[5:8] #parametros de la consulta
-        questionCount = responseDns[9:12]
-        answerCount = responseDns[13:16]
-        nsCount = responseDns[17:20]
-        aditionalCount = responseDns[20:24]
-        parametros = "{:b}".format(int(responseParams,16)).zfill(16)
-        #se convierte de string hex a entero
-        nsCount = int(nsCount,16)
-        answerCount = int(answerCount,16)
-        aditionalCount = int(aditionalCount,16)
+        if isTcp:
+            #---------- header -----------------------
+            responseId = responseDns[4:8] #ID de la consulta
+            responseParams = responseDns[8:12] #parametros de la consulta
+            questionCount = responseDns[12:16]
+            answerCount = responseDns[16:20]
+            nsCount = responseDns[20:24]
+            aditionalCount = responseDns[24:28]
+            parametros = "{:b}".format(int(responseParams,16)).zfill(16)
+            #se convierte de string hex a entero
+            nsCount = int(nsCount,16)
+            answerCount = int(answerCount,16)
+            aditionalCount = int(aditionalCount,16)
+        else:
+            #---------- header -----------------------
+            responseId = responseDns[0:4] #ID de la consulta
+            responseParams = responseDns[5:8] #parametros de la consulta
+            questionCount = responseDns[9:12]
+            answerCount = responseDns[13:16]
+            nsCount = responseDns[17:20]
+            aditionalCount = responseDns[20:24]
+            parametros = "{:b}".format(int(responseParams,16)).zfill(16)
+            #se convierte de string hex a entero
+            nsCount = int(nsCount,16)
+            answerCount = int(answerCount,16)
+            aditionalCount = int(aditionalCount,16)
         #----- QUESTION SECTION ------------------
         nextStart = 24
+        if isTcp:
+            nextStart +=4
+        
         url = ""
-        url,nextStart = self.getUrl(responseDns, nextStart)
+        url,nextStart = self.getUrl(responseDns, nextStart,isTcp)
 
         responseQtype = responseDns[nextStart:nextStart+4]
         nextStart+=4 #puntero a la siguiente parte de la respuesta a leer
@@ -217,7 +264,7 @@ class Navegador(QWidget,Ui_Form):
             #print(nextStart)
             answerText = ""
             #obtener la informacion  
-            answerName,nextStart = self.getUrl(responseDns, nextStart)
+            answerName,nextStart = self.getUrl(responseDns, nextStart,isTcp)
             answerText += "NAME: "+ answerName
 
             answerType =  self.getType(int(responseDns[nextStart:nextStart+4],16), False) 
@@ -239,11 +286,11 @@ class Navegador(QWidget,Ui_Form):
             elif answerType == "NS":
                 answerText += ", URL: "
                 # se obtiene la url en ascii del ns RR
-                nsUrl, nextStart = self.getUrl(responseDns, nextStart)
+                nsUrl, nextStart = self.getUrl(responseDns, nextStart,isTcp)
                 answerText += nsUrl
             elif answerType == "CNAME":
                 answerText += ", URL: "
-                nsUrl, nextStart = self.getUrl(responseDns, nextStart)
+                nsUrl, nextStart = self.getUrl(responseDns, nextStart,isTcp)
                 answerText += nsUrl
             else:
                 nextStart+= 2*answerLength 
