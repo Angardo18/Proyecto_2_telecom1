@@ -49,14 +49,25 @@ class Navegador(QWidget,Ui_Form):
         #enviar el request
         conect.send(requestString.encode())
         #recibir los datos
-        response = conect.recv(2**33)
+        
+        response = conect.recv(4096)
         print(response.decode())
-
-        responseText = response.decode()
+        responseText = ""
+        while len(response) > 0:
+            responseText += response.decode()
+            response = conect.recv(4096)
+        
+        print(responseText)
         #Separar el contenido de de los datos 
         headData = responseText.split('\r\n\r\n')
         
-        self.txtDisplay.setText(headData[1])
+        
+        
+        displayText = ""
+        for i in range(1,len(headData)):
+            displayText += headData[i]
+            
+        self.txtDisplay.setText(displayText)
     
     def sendDns(self):
         
