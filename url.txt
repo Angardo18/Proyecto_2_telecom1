@@ -1,0 +1,17 @@
+1. http://www.columbia.edu/~fdc/sample.html
+2. http://info.cern.ch
+3. http://gaia.cs.umass.edu/search.html
+
+--------------- DNS -----------------------
+
+uvg.edu.gt
+claro.com.gt
+google.com
+
+8.8.8.8
+4.4.4.4
+190.106.193.240
+198.41.0.4
+
+
+

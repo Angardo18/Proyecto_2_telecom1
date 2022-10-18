@@ -44,24 +44,33 @@ class Navegador(QWidget,Ui_Form):
         print(requestString)
         #inicial el socket
         conect = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #socket tcp
+        conect.settimeout(1)
         #iniciar sesion tcp
         conect.connect( (hostName, 80))
         #enviar el request
         conect.send(requestString.encode())
         #recibir los datos
-        
-        response = conect.recv(4096)
-        print(response.decode())
         responseText = ""
-        while len(response) > 0:
-            responseText += response.decode()
+        try:
             response = conect.recv(4096)
+            #print(response.decode())
         
+            cont = 1
+            print(cont)
+            
+            while len(response) > 0:
+                responseText += response.decode()
+                print("len response: ", len(responseText))
+                response = conect.recv(4096)
+                #cont+=1
+                print(len(response))
+            #    print(responseText)
+            conect.close()
+        except:
+            print("Time Out")
         print(responseText)
         #Separar el contenido de de los datos 
         headData = responseText.split('\r\n\r\n')
-        
-        
         
         displayText = ""
         for i in range(1,len(headData)):
@@ -219,7 +228,7 @@ class Navegador(QWidget,Ui_Form):
         #QCLASS
         qclass = 1
         message += "{:04x}".format(qclass)
-        
+
         if isTcp:
             print(len(message))
             lengthMessage = "{:04x}".format(int(len(message)/2)) #largo en bytes 
@@ -269,6 +278,7 @@ class Navegador(QWidget,Ui_Form):
         responseQtype = self.getType(int(responseQtype,16),False)
         responseQclass = responseDns[nextStart:nextStart+4]
         nextStart+=4 #puntero a la siguiente parte de la respuesta a leer
+        
         # Answers section
         answerRR = []
         for i in range(0,answerCount+nsCount+aditionalCount):
@@ -284,6 +294,7 @@ class Navegador(QWidget,Ui_Form):
             answerLength = int(responseDns[nextStart+16:nextStart+20],16)
             
             nextStart+=20
+            
             answerText += " ,RR type: " + answerType
             if answerType == "A":
                 answerText += ", IP: "
